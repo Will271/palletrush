@@ -10,16 +10,24 @@ public class LeagueDbContext(DbContextOptions<LeagueDbContext> options) : DbCont
     public DbSet<Heat> Heats => Set<Heat>();
     public DbSet<Registration> Registrations => Set<Registration>();
     public DbSet<Run> Runs => Set<Run>();
+    public DbSet<Penalty> Penalties => Set<Penalty>();
+    public DbSet<PendingConeHit> PendingConeHits => Set<PendingConeHit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Run>().Property(r => r.Id).ValueGeneratedNever();
-
         modelBuilder.Entity<Registration>()
             .HasIndex(r => new { r.HeatId, r.DriverId })
             .IsUnique()
             .HasDatabaseName("ux_registrations_heat_driver");
 
+        modelBuilder.Entity<Penalty>()
+            .HasIndex(p => new { p.RunId, p.ConeId })
+            .IsUnique();
+
+        modelBuilder.Entity<PendingConeHit>()
+            .HasIndex(p => new { p.RunId, p.ConeId })
+            .IsUnique();
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
         {
             entity.SetTableName(ToSnakeCase(entity.GetTableName()!));

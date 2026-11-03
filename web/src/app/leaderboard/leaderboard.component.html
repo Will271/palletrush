@@ -6,20 +6,37 @@
       <th>Driver</th>
       <th>Team</th>
       <th>Raw time</th>
+      <th>Hits</th>
+      <th>Penalty time</th>
+      <th>Total time</th>
     </tr>
   </thead>
   <tbody>
     @for (entry of entries(); track entry.runId) {
-      <tr>
+      <tr (click)="selectRun(entry.runId)" [class.selected]="selectedRunId() === entry.runId">
         <td>{{ entry.rank }}</td>
         <td>{{ entry.driverName }}</td>
         <td>{{ entry.teamName }}</td>
         <td>{{ entry.rawTimeMs | runTime }}</td>
+        <td>{{ entry.penaltyCount }}</td>
+        <td>+{{ entry.penaltySeconds }}s</td>
+        <td>{{ entry.totalTimeMs | runTime }}</td>
       </tr>
     } @empty {
       <tr>
-        <td colspan="4">No finished runs yet.</td>
+        <td colspan="7">No finished runs yet.</td>
       </tr>
     }
   </tbody>
 </table>
+
+@if (selectedRunId()) {
+  <h3>Penalties for run {{ selectedRunId() }}</h3>
+  <ul data-testid="run-penalties">
+    @for (penalty of penalties(); track penalty.coneId) {
+      <li>{{ penalty.coneId }} - +{{ penalty.seconds }}s at {{ penalty.sensorTs | formatIso }}</li>
+    } @empty {
+      <li>No Penalties</li>
+    }
+  </ul>
+}

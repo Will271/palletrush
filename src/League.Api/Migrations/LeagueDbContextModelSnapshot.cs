@@ -83,6 +83,70 @@ namespace League.Api.Migrations
                     b.ToTable("heats");
                 });
 
+            modelBuilder.Entity("League.Api.Data.Penalty", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ConeId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cone_id");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<int>("Seconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("seconds");
+
+                    b.Property<DateTimeOffset>("SensorTs")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sensor_ts");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "ConeId")
+                        .IsUnique();
+
+                    b.ToTable("penalties");
+                });
+
+            modelBuilder.Entity("League.Api.Data.PendingConeHit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ConeId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cone_id");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<DateTimeOffset>("SensorTs")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sensor_ts");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RunId", "ConeId")
+                        .IsUnique();
+
+                    b.ToTable("pending_cone_hits");
+                });
+
             modelBuilder.Entity("League.Api.Data.Registration", b =>
                 {
                     b.Property<int>("Id")
@@ -182,6 +246,17 @@ namespace League.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("League.Api.Data.Penalty", b =>
+                {
+                    b.HasOne("League.Api.Data.Run", "Run")
+                        .WithMany()
+                        .HasForeignKey("RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Run");
                 });
 
             modelBuilder.Entity("League.Api.Data.Registration", b =>
