@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { DriversService, OnCourseDriver } from '../../api/drivers.service';
 
 @Component({
@@ -8,13 +8,15 @@ import { DriversService, OnCourseDriver } from '../../api/drivers.service';
 })
 export class OnCourseComponent {
   private readonly driversService = inject(DriversService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly drivers = signal<OnCourseDriver[]>([]);
 
   constructor() {
-    setInterval(
+    const id = setInterval(
       () => this.driversService.getOnCourse().subscribe((r) => this.drivers.set(r)),
       2000,
     );
+    this.destroyRef.onDestroy(() => clearInterval(id));
   }
 }
