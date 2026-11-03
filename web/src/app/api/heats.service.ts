@@ -23,7 +23,16 @@ export interface LeaderboardEntry {
   driverName: string;
   teamName: string;
   rawTimeMs: number;
+  penaltyCount: number;
+  penaltySeconds: number;
+  totalTimeMs: number;
   rank: number;
+}
+
+export interface PenaltyEntry {
+  coneId: string;
+  seconds: number;
+  sensorTs: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -44,5 +53,9 @@ export class HeatsService {
 
   getLeaderboard(heatId: number) {
     return this.http.get<LeaderboardEntry[]>(`/api/heats/${heatId}/leaderboard`);
+  }
+
+  getPenalties(runId: string) {
+    return this.http.get<PenaltyEntry[]>(`/api/runs/${runId}/penalties`);
   }
 }
