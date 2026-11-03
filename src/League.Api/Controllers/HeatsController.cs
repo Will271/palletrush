@@ -33,6 +33,7 @@ public class HeatsController(
             RegistrationResult.Registered => Created(),
             RegistrationResult.HeatNotFound => NotFound(),
             RegistrationResult.HeatFull => Problem(title: "Heat is full", statusCode: StatusCodes.Status409Conflict),
+            RegistrationResult.AlreadyRegistered => Problem(title: "Driver already registered for this heat", statusCode: StatusCodes.Status409Conflict),
             _ => Problem(title: "Driver is not eligible", statusCode: StatusCodes.Status422UnprocessableEntity),
         };
     }
