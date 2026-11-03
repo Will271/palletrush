@@ -38,20 +38,30 @@ sequenceDiagram
     RS->>DB: Commit
 ```
 
-Tests that back this up (`ConeHitHandlerTests`):
+Tests that back this up:
 
-- Handling the same ConeHit twice adds one penalty
-- V1 retransmissions with different event IDs are deduped
-- Pending cone hits are reconciled when run starts
-- Duplicate v1 ConeHits before RunStarted create only one penalty
-- Concurrent ConeHit and RunStarted store the penalty
-- Concurrent ConeHit and RunStarted store the penalty in both orders
+**ConeHitHandlerTests**
+- Deduplicates repeated ConeHits, including V1 retransmissions with different event IDs.
+- Reconciles pending hits when a run starts, including multiple and duplicate hits.
+- Handles distinct cones and concurrent ConeHit/RunStarted events correctly.
+- Returns penalties ordered by sensor timestamp and an empty list when none exist.
+
+**EventOrderingTests**
+- Verifies both lock acquisition orders: ConeHit first and RunStarted first.
+- Uses per-run advisory lock inspection and polling for deterministic synchronization.
+
+**RunStartedHandlerTests**
+- Ensures duplicate RunStarted events create one run and reconcile pending hits only once.
+
+**LeaderboardTests**
+- Verifies ranking by total time, penalty count, and finish timestamp; excludes unfinished runs.
 
 **Other trade-offs you made:**
 
 - Idempotency: Chose database-level `ON CONFLICT DO NOTHING` over application-level duplicate checks, avoiding extra queries and EF tracking.
 - Registration concurrency: Chose a database transaction and atomic update over application-level locking, keeping concurrency control at the database level.
 - Leaderboard ranking: Chose in-memory sorting over SQL-based ranking, favoring simpler, more testable logic for the expected small number of runs per heat.
+- Redis consumer reliability: `CourseEventsConsumer` now dispatches each event before acknowledging it, so a failed handler leaves the message pending instead of losing it. Pending entries idle for more than 30 seconds are recovered with `XAUTOCLAIM` and processed through the same dispatch path — including messages abandoned by a consumer that stopped running. Redelivery is safe because all handlers are idempotent (`ON CONFLICT DO NOTHING`), and shutdown cancellation propagates instead of being logged as a failure. Known limitation: a poison message that always fails is retried indefinitely; a retry limit with a dead-letter stream would be the production follow-up.
 
 ## AI usage
 
@@ -64,16 +74,15 @@ Worked in step by step mode: split the work into small tasks and verified manual
 
 **One AI suggestion you rejected or changed, and why:**
 
-My first driver-search fix used only `switchMap` to cancel stale requests, but it fired a request on every keystroke and lacked `distinctUntilChanged()`. 
-The debounce alone did not cancel in-flight requests, so the `AbortController`/`xhr.abort()` technique via `switchMap` was kept to abort the previous request. I improved it by adding `debounceTime(300)` and `distinctUntilChanged()`, so the search waits for a typing pause and skips duplicate queries.
+My first driver-search fix used only `switchMap` to cancel stale requests, but it fired a request on every keystroke and lacked `distinctUntilChanged()`. My first debounce version applied `debounceTime(300)` before `switchMap`, which left the previous request alive during the 300 ms window. The final version puts `timer(300)` inside the outer `switchMap`, so a new search term immediately cancels the previous timer or in-flight HTTP request, and the new request fires only after 300 ms without further input.
 
-I did not touch Angular recently, but I knew how `AbortController` and debounce should work; I implemented it the Angular way and would consider diving deeper to check the traditional approach.
+I did not touch Angular recently, but I knew how request cancellation and debounce should work; I implemented it the Angular way (unsubscribing the previous `HttpClient` observable aborts the request) and would consider diving deeper into the traditional `AbortController` approach.
 
 ## Shortcuts and next steps
 
 **What you skipped, and what you'd do next with more time:**
 
-- I briefly fixed the UI — it is far from perfect, both functionally and visually.
+- I briefly fixed the UI — it is far from perfect, both functionally and visually. For example, the Drivers page loads results without any loading indication, so the user gets no feedback while a search is in flight; a spinner or skeleton state would be a good first fix. Also no feel of how many drivers are in the system. The search is not intuitive.
 - No full end-to-end test across the Redis stream, Telemetry, and League services. I would add a test that publishes a simulated stream and reads the leaderboard.
 - The `pending_cone_hits` table has no cleanup for hits whose `RunStarted` never arrives; a retention column or periodic sweep would be useful.
 - `RunFinished` before `RunStarted` is currently ignored; a pending finish buffer or post-`RunStarted` reconciliation would preserve out-of-order finishes.
@@ -83,7 +92,7 @@ I did not touch Angular recently, but I knew how `AbortController` and debounce 
 - Observability: add health checks, metrics, and structured logging.
 - Real-time leaderboard: replace polling with SignalR/WebSocket updates.
 - Database indexes: add `runs.heat_id`, `penalties.run_id`, and `registrations.heat_id` if query volume grows.
-- More Angular tests: component tests for leaderboard, registration, and search.
+- More Angular tests: component tests for leaderboard, registration, and search. Also reviewing the existing tests and the codebase itself.
 - Security: add auth, rate limiting, and input validation.
 - Lint/format: add `dotnet format`, `eslint`, and `prettier` to CI.
 - Dependency updates: add Dependabot/Renovate.

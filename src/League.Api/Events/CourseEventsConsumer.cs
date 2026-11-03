@@ -28,13 +28,48 @@ public class CourseEventsConsumer(
                     groupReady = true;
                 }
 
+                var pending = await db.StreamAutoClaimAsync(
+                    CourseEvents.Stream,
+                    Group,
+                    _consumerName,
+                    30_000,
+                    StreamPosition.Beginning,
+                    10);
+
+                foreach (var entry in pending.ClaimedEntries)
+                {
+                    try
+                    {
+                        await DispatchAsync(entry, stoppingToken);
+                        await db.StreamAcknowledgeAsync(CourseEvents.Stream, Group, entry.Id);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to handle pending course event {EntryId}", entry.Id);
+                    }
+                }
+
                 var entries = await db.StreamReadGroupAsync(CourseEvents.Stream, Group, _consumerName, ">", count: 10);
 
                 foreach (var entry in entries)
                 {
-                    await db.StreamAcknowledgeAsync(CourseEvents.Stream, Group, entry.Id);
-                    try { await DispatchAsync(entry, stoppingToken); }
-                    catch (Exception ex) { logger.LogError(ex, "Failed to handle course event {EntryId}", entry.Id); }
+                    try
+                    {
+                        await DispatchAsync(entry, stoppingToken);
+                        await db.StreamAcknowledgeAsync(CourseEvents.Stream, Group, entry.Id);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to handle course event {EntryId}", entry.Id);
+                    }
                 }
 
                 if (entries.Length == 0)

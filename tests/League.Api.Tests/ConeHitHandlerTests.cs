@@ -130,6 +130,110 @@ public class ConeHitHandlerTests
         Assert.That(penalties, Has.Count.EqualTo(1));
     }
 
+    [Test]
+    public async Task Different_cones_on_the_same_run_each_create_a_penalty()
+    {
+        var runId = Guid.NewGuid();
+        var t0 = new DateTimeOffset(2026, 11, 7, 9, 30, 0, TimeSpan.Zero);
+        await TestEnvironment.HandleAsync(new RunStarted(Guid.NewGuid(), runId, HeatId, DriverId, t0, "v2"));
+        await TestEnvironment.HandleAsync(new RunFinished(Guid.NewGuid(), runId, t0.AddSeconds(90), "v2"));
+
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C1", t0.AddSeconds(10), "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C2", t0.AddSeconds(20), "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C3", t0.AddSeconds(30), "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C1", t0.AddSeconds(10), "v2"));
+
+        using var client = TestEnvironment.Factory.CreateClient();
+        var penalties = await client.GetFromJsonAsync<List<PenaltyRow>>($"/api/runs/{runId}/penalties");
+        Assert.That(penalties!.Select(p => p.ConeId), Is.EqualTo(new[] { "C1", "C2", "C3" }));
+
+        var leaderboard = await client.GetFromJsonAsync<List<LeaderboardRow>>($"/api/heats/{HeatId}/leaderboard");
+        var row = leaderboard!.Single(r => r.RunId == runId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.PenaltyCount, Is.EqualTo(3));
+            Assert.That(row.TotalTimeMs, Is.EqualTo(row.RawTimeMs + 15000));
+        }
+    }
+
+    [Test]
+    public async Task Multiple_pending_cone_hits_are_all_reconciled_when_run_starts()
+    {
+        var runId = Guid.NewGuid();
+        var t0 = new DateTimeOffset(2026, 11, 7, 9, 30, 0, TimeSpan.Zero);
+
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C1", t0.AddSeconds(10), "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C2", t0.AddSeconds(20), "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C3", t0.AddSeconds(30), "v2"));
+
+        await TestEnvironment.HandleAsync(new RunStarted(Guid.NewGuid(), runId, HeatId, DriverId, t0, "v2"));
+
+        using var client = TestEnvironment.Factory.CreateClient();
+        var penalties = await client.GetFromJsonAsync<List<PenaltyRow>>($"/api/runs/{runId}/penalties");
+        Assert.That(penalties!.Select(p => p.ConeId), Is.EqualTo(new[] { "C1", "C2", "C3" }));
+    }
+
+    [Test]
+    public async Task Duplicate_pending_ConeHits_for_the_same_cone_create_one_penalty()
+    {
+        var runId = Guid.NewGuid();
+        var t0 = new DateTimeOffset(2026, 11, 7, 9, 30, 0, TimeSpan.Zero);
+
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C3", t0.AddSeconds(30), "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C3", t0.AddSeconds(30), "v2"));
+
+        await TestEnvironment.HandleAsync(new RunStarted(Guid.NewGuid(), runId, HeatId, DriverId, t0, "v2"));
+        await TestEnvironment.HandleAsync(new RunFinished(Guid.NewGuid(), runId, t0.AddSeconds(90), "v2"));
+
+        using var client = TestEnvironment.Factory.CreateClient();
+        var penalties = await client.GetFromJsonAsync<List<PenaltyRow>>($"/api/runs/{runId}/penalties");
+        Assert.That(penalties, Has.Count.EqualTo(1));
+
+        var leaderboard = await client.GetFromJsonAsync<List<LeaderboardRow>>($"/api/heats/{HeatId}/leaderboard");
+        var row = leaderboard!.Single(r => r.RunId == runId);
+        Assert.That(row.PenaltyCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Penalties_are_returned_ordered_by_sensor_ts()
+    {
+        var runId = Guid.NewGuid();
+        var t0 = new DateTimeOffset(2026, 11, 7, 9, 30, 0, TimeSpan.Zero);
+        await TestEnvironment.HandleAsync(new RunStarted(Guid.NewGuid(), runId, HeatId, DriverId, t0, "v2"));
+        await TestEnvironment.HandleAsync(new RunFinished(Guid.NewGuid(), runId, t0.AddSeconds(90), "v2"));
+
+        var late = t0.AddSeconds(50);
+        var early = t0.AddSeconds(10);
+        var middle = t0.AddSeconds(30);
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C2", late, "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C1", early, "v2"));
+        await TestEnvironment.HandleAsync(new ConeHit(Guid.NewGuid(), runId, "C3", middle, "v2"));
+
+        using var client = TestEnvironment.Factory.CreateClient();
+        var penalties = await client.GetFromJsonAsync<List<PenaltyRow>>($"/api/runs/{runId}/penalties");
+
+        Assert.That(penalties, Has.Count.EqualTo(3));
+        Assert.That(penalties!.Select(p => p.ConeId), Is.EqualTo(new[] { "C1", "C3", "C2" }));
+        Assert.That(penalties.Select(p => p.Seconds), Is.EqualTo(new[] { 5, 5, 5 }));
+        Assert.That(penalties.Select(p => p.SensorTs), Is.EqualTo(new[] { early, middle, late }));
+    }
+
+    [Test]
+    public async Task Penalties_endpoint_returns_empty_list_when_run_has_no_penalties()
+    {
+        var runId = Guid.NewGuid();
+        var t0 = new DateTimeOffset(2026, 11, 7, 9, 30, 0, TimeSpan.Zero);
+        await TestEnvironment.HandleAsync(new RunStarted(Guid.NewGuid(), runId, HeatId, DriverId, t0, "v2"));
+        await TestEnvironment.HandleAsync(new RunFinished(Guid.NewGuid(), runId, t0.AddSeconds(90), "v2"));
+
+        using var client = TestEnvironment.Factory.CreateClient();
+        var response = await client.GetAsync($"/api/runs/{runId}/penalties");
+
+        Assert.That(response.StatusCode, Is.EqualTo(System.Net.HttpStatusCode.OK));
+        var penalties = await response.Content.ReadFromJsonAsync<List<PenaltyRow>>();
+        Assert.That(penalties, Is.Empty);
+    }
+
     private record LeaderboardRow(Guid RunId, int RawTimeMs, int PenaltyCount, int TotalTimeMs);
     private record PenaltyRow(string ConeId, int Seconds, DateTimeOffset SensorTs);
 }

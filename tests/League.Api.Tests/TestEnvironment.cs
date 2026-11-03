@@ -13,6 +13,7 @@ public class TestEnvironment
     private static readonly RedisContainer Redis = new RedisBuilder("redis:7.4.11").Build();
 
     public static WebApplicationFactory<Program> Factory { get; private set; } = null!;
+    public static string PostgresConnectionString => Postgres.GetConnectionString();
 
     [OneTimeSetUp]
     public async Task StartAsync()
