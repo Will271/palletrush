@@ -12,7 +12,7 @@
       <tr>
         <td>{{ registration.driverName }}</td>
         <td>{{ registration.teamName }}</td>
-        <td>{{ registration.createdAt | date: 'short' }}</td>
+        <td>{{ registration.createdAt | formatIso }}</td>
         <td>
           <button type="button" (click)="simulate.emit(registration)">Simulate run</button>
         </td>
