@@ -1,6 +1,6 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
+import { distinctUntilChanged, switchMap, timer } from 'rxjs';
 import { DriversService, DriverSummary } from '../../api/drivers.service';
 
 @Component({
@@ -18,9 +18,12 @@ export class DriverSearchComponent {
   constructor() {
     const subscription = toObservable(this.query)
       .pipe(
-        debounceTime(300),
         distinctUntilChanged(),
-        switchMap((search) => this.driversService.search(search)),
+        switchMap((search) =>
+          timer(300).pipe(
+            switchMap(() => this.driversService.search(search)),
+          ),
+        ),
       )
       .subscribe((r) => this.results.set(r));
 
