@@ -15,6 +15,11 @@ public class LeagueDbContext(DbContextOptions<LeagueDbContext> options) : DbCont
     {
         modelBuilder.Entity<Run>().Property(r => r.Id).ValueGeneratedNever();
 
+        modelBuilder.Entity<Registration>()
+            .HasIndex(r => new { r.HeatId, r.DriverId })
+            .IsUnique()
+            .HasDatabaseName("ux_registrations_heat_driver");
+
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
         {
             entity.SetTableName(ToSnakeCase(entity.GetTableName()!));
