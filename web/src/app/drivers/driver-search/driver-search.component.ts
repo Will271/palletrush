@@ -1,4 +1,6 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs';
 import { DriversService, DriverSummary } from '../../api/drivers.service';
 
 @Component({
@@ -8,14 +10,20 @@ import { DriversService, DriverSummary } from '../../api/drivers.service';
 })
 export class DriverSearchComponent {
   private readonly driversService = inject(DriversService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly query = signal('');
   readonly results = signal<DriverSummary[]>([]);
 
   constructor() {
-    effect(() => {
-      const search = this.query();
-      this.driversService.search(search).subscribe((r) => this.results.set(r));
-    });
+    const subscription = toObservable(this.query)
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        switchMap((search) => this.driversService.search(search)),
+      )
+      .subscribe((r) => this.results.set(r));
+
+    this.destroyRef.onDestroy(() => subscription.unsubscribe());
   }
 }
