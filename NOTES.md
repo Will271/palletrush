@@ -40,18 +40,18 @@ sequenceDiagram
 
 Tests that back this up (`ConeHitHandlerTests`):
 
-- `Handling_the_same_ConeHit_twice_adds_one_penalty` — idempotent `ConeHit` for an existing run.
-- `V1_retransmissions_with_different_event_ids_are_deduped` — v1 `ConeHit` retransmissions with different `EventId`s still produce one penalty.
-- `Pending_cone_hits_are_reconciled_when_run_starts` — `ConeHit` before `RunStarted` is moved to `penalties` when the run starts.
-- `Duplicate_v1_ConeHits_before_RunStarted_create_only_one_penalty` — duplicate v1 `ConeHit`s before `RunStarted` are deduplicated in `pending_cone_hits`.
-- `Concurrent_ConeHit_and_RunStarted_store_the_penalty` — `ConeHit` and `RunStarted` fired in parallel do not race.
-- `Concurrent_ConeHit_and_RunStarted_store_the_penalty_both_orders` — covers both start orders, but uses a 200 ms delay heuristic; a fully deterministic test would need a synchronization hook inside the handlers.
+- Handling the same ConeHit twice adds one penalty
+- V1 retransmissions with different event IDs are deduped
+- Pending cone hits are reconciled when run starts
+- Duplicate v1 ConeHits before RunStarted create only one penalty
+- Concurrent ConeHit and RunStarted store the penalty
+- Concurrent ConeHit and RunStarted store the penalty in both orders
 
 **Other trade-offs you made:**
 
-- Used raw `INSERT ... ON CONFLICT DO NOTHING` for cone-hit and penalty inserts to keep the handlers idempotent without loading entities into EF change tracking.
-- Kept leaderboard ranking in memory: per-heat finished runs are few, and the sort order (total time, then penalty count, then finish sensor timestamp) is easier to verify in C# than in SQL.
-- `RegistrationService` uses an atomic `ExecuteUpdateAsync` to reserve a spot before inserting the registration, and a unique constraint on `(HeatId, DriverId)` guards against duplicate registration races.
+- Idempotency: Chose database-level `ON CONFLICT DO NOTHING` over application-level duplicate checks, avoiding extra queries and EF tracking.
+- Registration concurrency: Chose a database transaction and atomic update over application-level locking, keeping concurrency control at the database level.
+- Leaderboard ranking: Chose in-memory sorting over SQL-based ranking, favoring simpler, more testable logic for the expected small number of runs per heat.
 
 ## AI usage
 
@@ -88,3 +88,4 @@ I did not touch Angular recently, but I knew how `AbortController` and debounce 
 - Lint/format: add `dotnet format`, `eslint`, and `prettier` to CI.
 - Dependency updates: add Dependabot/Renovate.
 - Documentation: invest in API docs, user guides, and architecture docs.
+- Protect `main` from direct commits: add branch protection rules or require PR reviews.
