@@ -108,7 +108,9 @@ namespace League.Api.Migrations
 
                     b.HasIndex("DriverId");
 
-                    b.HasIndex("HeatId");
+                    b.HasIndex("HeatId", "DriverId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_registrations_heat_driver");
 
                     b.ToTable("registrations");
                 });
