@@ -62,6 +62,7 @@ Tests that back this up:
 - Registration concurrency: Chose a database transaction and atomic update over application-level locking, keeping concurrency control at the database level.
 - Leaderboard ranking: Chose in-memory sorting over SQL-based ranking, favoring simpler, more testable logic for the expected small number of runs per heat.
 - Redis consumer reliability: `CourseEventsConsumer` now dispatches each event before acknowledging it, so a failed handler leaves the message pending instead of losing it. Pending entries idle for more than 30 seconds are recovered with `XAUTOCLAIM` and processed through the same dispatch path — including messages abandoned by a consumer that stopped running. Redelivery is safe because all handlers are idempotent (`ON CONFLICT DO NOTHING`), and shutdown cancellation propagates instead of being logged as a failure. Known limitation: a poison message that always fails is retried indefinitely; a retry limit with a dead-letter stream would be the production follow-up.
+- Run/penalty concurrency: Chose PostgreSQL transactional advisory locks over Redis locks because the database is the source of truth and the advisory lock is released automatically at transaction end. A Redis lock would be held in a separate store, would need a TTL long enough to cover the database transaction, and would introduce the risk of the lock expiring before the commit.
 
 ## AI usage
 
